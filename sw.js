@@ -1,4 +1,4 @@
-const CACHE = '8bitdo-bat-v1';
+const CACHE = '8bitdo-bat-v2';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -7,5 +7,5 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });

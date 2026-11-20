@@ -152,7 +152,10 @@
       try {
         statusEl.textContent = 'Select your 8BitDo controller...';
         const device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
+          filters: [
+            { namePrefix: '8BitDo' },
+            { services: ['battery_service'] }
+          ],
           optionalServices: ['battery_service', 'device_information']
         });
 
