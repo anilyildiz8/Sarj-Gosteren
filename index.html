@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0f1115">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <title>8BitDo 2C Battery</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -112,27 +113,47 @@
       if (text !== undefined) statusEl.textContent = text;
     }
 
-    function cleanup() {
+    function deviceName() {
+      return activeDevice?.name || 'Controller';
+    }
+
+    function onBatteryChanged(e) {
+      render(e.target.value.getUint8(0), `${deviceName()} • live`);
+    }
+
+    function onDisconnected() {
+      teardown();
+      render(null, 'Disconnected.');
+    }
+
+    function teardown() {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      batteryChar = null;
+      if (batteryChar) {
+        batteryChar.removeEventListener('characteristicvaluechanged', onBatteryChanged);
+        batteryChar = null;
+      }
+      if (activeDevice) {
+        activeDevice.removeEventListener('gattserverdisconnected', onDisconnected);
+        if (activeDevice.gatt.connected) activeDevice.gatt.disconnect();
+        activeDevice = null;
+      }
       refreshBtn.hidden = true;
       connectBtn.textContent = 'Connect';
     }
 
     async function readBattery() {
-      if (!batteryChar) return;
       const val = await batteryChar.readValue();
-      const level = val.getUint8(0);
-      const name = activeDevice?.name || 'Controller';
-      render(level, `${name} • updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      render(val.getUint8(0), `${deviceName()} • updated ${time}`);
     }
 
     async function refreshNow() {
+      if (!batteryChar) return;
       try {
         await readBattery();
       } catch (err) {
+        teardown();
         render(null, 'Could not read battery: ' + (err.message || err));
-        cleanup();
       }
     }
 
@@ -142,29 +163,33 @@
         return;
       }
 
-      if (activeDevice?.gatt?.connected) {
-        activeDevice.gatt.disconnect();
-        cleanup();
+      if (activeDevice) {
+        teardown();
         render(null, 'Disconnected.');
         return;
       }
 
+      let device;
       try {
         statusEl.textContent = 'Select your 8BitDo controller...';
-        const device = await navigator.bluetooth.requestDevice({
+        device = await navigator.bluetooth.requestDevice({
           filters: [
             { namePrefix: '8BitDo' },
             { services: ['battery_service'] }
           ],
           optionalServices: ['battery_service', 'device_information']
         });
+      } catch (err) {
+        statusEl.textContent =
+          err.name === 'NotFoundError' ? 'No device selected.' : err.message || String(err);
+        return;
+      }
 
-        activeDevice = device;
-        device.addEventListener('gattserverdisconnected', () => {
-          cleanup();
-          render(null, 'Disconnected.');
-        });
+      activeDevice = device;
+      device.addEventListener('gattserverdisconnected', onDisconnected);
+      connectBtn.textContent = 'Disconnect';
 
+      try {
         statusEl.textContent = 'Connecting...';
         const server = await device.gatt.connect();
 
@@ -172,44 +197,34 @@
         try {
           service = await server.getPrimaryService('battery_service');
         } catch {
-          // Standard 0x180F battery service not exposed by this firmware
           let found = [];
           try {
-            const svcs = await server.getPrimaryServices();
-            found = svcs.map((s) => s.uuid);
+            found = (await server.getPrimaryServices()).map((s) => s.uuid);
           } catch {}
+          teardown();
           render(
             null,
-            'Connected, but controller did not expose standard Battery Service (0x180F).' +
+            'Controller did not expose the standard Battery Service (0x180F).' +
               (found.length ? ' Services: ' + found.join(', ') : '')
           );
-          connectBtn.textContent = 'Disconnect';
           return;
         }
 
         batteryChar = await service.getCharacteristic('battery_level');
         await readBattery();
-
-        connectBtn.textContent = 'Disconnect';
         refreshBtn.hidden = false;
 
         try {
+          batteryChar.addEventListener('characteristicvaluechanged', onBatteryChanged);
           await batteryChar.startNotifications();
-          batteryChar.addEventListener('characteristicvaluechanged', (e) => {
-            const level = e.target.value.getUint8(0);
-            const name = activeDevice?.name || 'Controller';
-            render(level, `${name} • live`);
-          });
         } catch {
-          // Low-power fallback poll every 30s if notifications aren't supported
+          batteryChar.removeEventListener('characteristicvaluechanged', onBatteryChanged);
           pollTimer = setInterval(refreshNow, 30000);
         }
       } catch (err) {
-        if (err.name === 'NotFoundError') {
-          statusEl.textContent = 'No device selected.';
-        } else {
-          render(null, err.message || String(err));
-        }
+        if (activeDevice !== device) return;
+        teardown();
+        render(null, err.message || String(err));
       }
     }
 
