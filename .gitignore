@@ -1,0 +1,22 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Local secrets (never commit)
+.env
+.env.*
+
+# In case tooling is added later
+node_modules/
+__pycache__/
