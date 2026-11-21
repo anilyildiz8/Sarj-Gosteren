@@ -80,16 +80,17 @@
   </style>
 </head>
 <body>
-  <div class="title">8BitDo Ultimate 2C</div>
+  <div class="title" id="title">Battery</div>
   <div class="percent" id="pct">--%</div>
   <div class="bar-wrap"><div class="bar" id="bar"></div></div>
-  <div class="status" id="status">Switch controller to BT mode, then tap Connect.</div>
+  <div class="status" id="status"></div>
   <div class="actions">
     <button id="connectBtn" onclick="connect()">Connect</button>
     <button id="refreshBtn" class="secondary" onclick="refreshNow()" hidden>Refresh</button>
   </div>
 
   <script>
+    const titleEl = document.getElementById('title');
     const pctEl = document.getElementById('pct');
     const barEl = document.getElementById('bar');
     const statusEl = document.getElementById('status');
@@ -118,7 +119,7 @@
     }
 
     function onBatteryChanged(e) {
-      render(e.target.value.getUint8(0), `${deviceName()} • live`);
+      render(e.target.value.getUint8(0), 'Live');
     }
 
     function onDisconnected() {
@@ -139,12 +140,13 @@
       }
       refreshBtn.hidden = true;
       connectBtn.textContent = 'Connect';
+      titleEl.textContent = 'Battery';
     }
 
     async function readBattery() {
       const val = await batteryChar.readValue();
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      render(val.getUint8(0), `${deviceName()} • updated ${time}`);
+      render(val.getUint8(0), `Updated ${time}`);
     }
 
     async function refreshNow() {
@@ -171,7 +173,7 @@
 
       let device;
       try {
-        statusEl.textContent = 'Select your 8BitDo controller...';
+        statusEl.textContent = 'Select your device...';
         device = await navigator.bluetooth.requestDevice({
           filters: [
             { namePrefix: '8BitDo' },
@@ -186,6 +188,7 @@
       }
 
       activeDevice = device;
+      titleEl.textContent = deviceName();
       device.addEventListener('gattserverdisconnected', onDisconnected);
       connectBtn.textContent = 'Disconnect';
 

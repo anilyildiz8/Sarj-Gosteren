@@ -1,4 +1,4 @@
-const CACHE = '8bitdo-bat-v3';
+const CACHE = '8bitdo-bat-v4';
 const ASSETS = [
   './',
   './index.html',
